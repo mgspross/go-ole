@@ -32,12 +32,15 @@ func UTF16PtrToString(p *uint16) string {
 	if p == nil {
 		return ""
 	}
-	a := (*[10000]uint16)(unsafe.Pointer(p))
-	i := 0
-	for a[i] != 0 {
-		i++
+	var length uint32 = SysStringLen((*int16)(unsafe.Pointer(p)))
+	a := make([]uint16, length)
+
+	ptr := unsafe.Pointer(p)
+	for i := 0; i < int(length); i++ {
+		a[i] = *(*uint16)(ptr)
+		ptr = unsafe.Pointer(uintptr(ptr) + 2)
 	}
-	return string(utf16.Decode(a[:i]))
+	return string(utf16.Decode(a))
 }
 
 func convertHresultToError(hr uintptr, r2 uintptr, ignore error) (err error) {
