@@ -208,7 +208,7 @@ func invoke(disp *IDispatch, dispid int32, dispatch int16, params ...interface{}
 		if excepInfo.bstrDescription == nil {
 			err = NewError(hr)
 		} else {
-			bs := UTF16PtrToString(excepInfo.bstrDescription)
+			bs := BasicStringToString(excepInfo.bstrDescription)
 			err = NewErrorWithDescription(hr, bs)
 		}
 	}

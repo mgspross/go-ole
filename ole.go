@@ -82,7 +82,7 @@ func (v *VARIANT) ToArray() *SafeArrayConversion {
 }
 
 func (v *VARIANT) ToString() string {
-	return UTF16PtrToString(*(**uint16)(unsafe.Pointer(&v.Val)))
+	return BasicStringToString(*(**uint16)(unsafe.Pointer(&v.Val)))
 }
 
 func (v *VARIANT) Clear() error {
