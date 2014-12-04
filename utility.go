@@ -29,6 +29,22 @@ func BytePtrToString(p *byte) string {
 }
 
 func UTF16PtrToString(p *uint16) string {
+
+	if p == nil {
+		return ""
+	}
+	var length uint32 = SysStringLen((*int16)(unsafe.Pointer(p)))
+	a := make([]uint16, length)
+
+	ptr := unsafe.Pointer(p)
+	for i := 0; i < int(length); i++ {
+		a[i] = *(*uint16)(ptr)
+		ptr = unsafe.Pointer(uintptr(ptr) + 2)
+	}
+	return string(utf16.Decode(a))
+}
+
+func BasicStringToString(p *uint16) string {
 	if p == nil {
 		return ""
 	}
