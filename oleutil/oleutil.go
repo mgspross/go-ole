@@ -1,6 +1,7 @@
 package oleutil
 
 import (
+	"fmt"
 	"reflect"
 	"syscall"
 	"unsafe"
@@ -143,11 +144,17 @@ func dispRelease(this *ole.IUnknown) int32 {
 	return pthis.ref
 }
 
-func dispGetIDsOfNames(this *ole.IUnknown, iid *ole.GUID, wnames []*uint16, namelen int, lcid int, pdisp []int32) uintptr {
+func dispGetIDsOfNames(this *ole.IUnknown, iid *ole.GUID, pwnames uintptr, namelen int, lcid int, ppdisp uintptr) uintptr {
+
+	fmt.Println("in dispGetIDsOfNames")
+	wnames := (*[1000]*uint16)(unsafe.Pointer(pwnames))
+	pdisp := (*[1000]int32)(unsafe.Pointer(ppdisp))
+
 	pthis := (*stdDispatch)(unsafe.Pointer(this))
 	names := make([]string, len(wnames))
 	for i := 0; i < len(names); i++ {
 		names[i] = ole.UTF16PtrToString(wnames[i])
+		fmt.Println(names[i])
 	}
 	for n := 0; n < namelen; n++ {
 		if id, ok := pthis.funcMap[names[n]]; ok {
@@ -201,10 +208,11 @@ func ConnectObject(disp *ole.IDispatch, iid *ole.GUID, idisp interface{}) (cooki
 	if edisp, ok := idisp.(*ole.IUnknown); ok {
 		cookie, err = point.Advise(edisp)
 		container.Release()
-		if err != nil {
+		if err == nil {
 			return
 		}
 	}
+
 	rv := reflect.ValueOf(disp).Elem()
 	if rv.Type().Kind() == reflect.Struct {
 		dest := &stdDispatch{}
