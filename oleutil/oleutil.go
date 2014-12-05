@@ -1,7 +1,6 @@
 package oleutil
 
 import (
-	"fmt"
 	"reflect"
 	"syscall"
 	"unsafe"
@@ -145,8 +144,6 @@ func dispRelease(this *ole.IUnknown) int32 {
 }
 
 func dispGetIDsOfNames(this *ole.IUnknown, iid *ole.GUID, pwnames uintptr, namelen int, lcid int, ppdisp uintptr) uintptr {
-
-	fmt.Println("in dispGetIDsOfNames")
 	wnames := (*[1000]*uint16)(unsafe.Pointer(pwnames))
 	pdisp := (*[1000]int32)(unsafe.Pointer(ppdisp))
 
@@ -154,7 +151,6 @@ func dispGetIDsOfNames(this *ole.IUnknown, iid *ole.GUID, pwnames uintptr, namel
 	names := make([]string, len(wnames))
 	for i := 0; i < len(names); i++ {
 		names[i] = ole.UTF16PtrToString(wnames[i])
-		fmt.Println(names[i])
 	}
 	for n := 0; n < namelen; n++ {
 		if id, ok := pthis.funcMap[names[n]]; ok {
@@ -207,6 +203,7 @@ func ConnectObject(disp *ole.IDispatch, iid *ole.GUID, idisp interface{}) (cooki
 	}
 	if edisp, ok := idisp.(*ole.IUnknown); ok {
 		cookie, err = point.Advise(edisp)
+		point.Release()
 		container.Release()
 		if err == nil {
 			return
@@ -237,4 +234,67 @@ func ConnectObject(disp *ole.IDispatch, iid *ole.GUID, idisp interface{}) (cooki
 	container.Release()
 
 	return 0, ole.NewError(ole.E_INVALIDARG)
+}
+
+/* New API for event sink connections */
+
+type AdvisoryConnection struct {
+	cookie    uint32
+	point     *ole.IConnectionPoint
+	container *ole.IConnectionPointContainer
+}
+
+func (connection *AdvisoryConnection) Unadvise() (err error) {
+	err = connection.point.Unadvise(connection.cookie)
+	connection.point.Release()
+	connection.container.Release()
+	return
+}
+
+func Advise(disp *ole.IDispatch, iid *ole.GUID, idisp interface{}) (connection *AdvisoryConnection, err error) {
+	unknown, err := disp.QueryInterface(ole.IID_IConnectionPointContainer)
+	if err != nil {
+		return
+	}
+
+	container := (*ole.IConnectionPointContainer)(unsafe.Pointer(unknown))
+	var point *ole.IConnectionPoint
+	err = container.FindConnectionPoint(iid, &point)
+	if err != nil {
+		return
+	}
+	if edisp, ok := idisp.(*ole.IUnknown); ok {
+		cookie, err := point.Advise(edisp)
+		if err != nil {
+			point.Release()
+			container.Release()
+			return nil, ole.NewError(ole.E_INVALIDARG)
+		}
+		return &AdvisoryConnection{cookie: cookie, point: point, container: container}, nil
+	}
+
+	rv := reflect.ValueOf(disp).Elem()
+	if rv.Type().Kind() == reflect.Struct {
+		dest := &stdDispatch{}
+		dest.lpVtbl = &stdDispatchVtbl{}
+		dest.lpVtbl.pQueryInterface = syscall.NewCallback(dispQueryInterface)
+		dest.lpVtbl.pAddRef = syscall.NewCallback(dispAddRef)
+		dest.lpVtbl.pRelease = syscall.NewCallback(dispRelease)
+		dest.lpVtbl.pGetTypeInfoCount = syscall.NewCallback(dispGetTypeInfoCount)
+		dest.lpVtbl.pGetTypeInfo = syscall.NewCallback(dispGetTypeInfo)
+		dest.lpVtbl.pGetIDsOfNames = syscall.NewCallback(dispGetIDsOfNames)
+		dest.lpVtbl.pInvoke = syscall.NewCallback(dispInvoke)
+		dest.iface = disp
+		dest.iid = iid
+		cookie, err := point.Advise((*ole.IUnknown)(unsafe.Pointer(dest)))
+
+		if err != nil {
+			point.Release()
+			container.Release()
+			return nil, ole.NewError(ole.E_INVALIDARG)
+		}
+		return &AdvisoryConnection{cookie: cookie, point: point, container: container}, nil
+	}
+
+	return nil, ole.NewError(ole.E_INVALIDARG)
 }
