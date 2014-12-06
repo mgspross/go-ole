@@ -28,12 +28,17 @@ func BytePtrToString(p *byte) string {
 	return string(a[:i])
 }
 
+// Alias for LpOleStrToString - kept for compatibility reasons
 func UTF16PtrToString(p *uint16) string {
+	return LpOleStrToString(p)
+}
+
+func LpOleStrToString(p *uint16) string {
 	if p == nil {
 		return ""
 	}
 
-	length := UTF16StringLen(p)
+	length := lpOleStrLen(p)
 	a := make([]uint16, length)
 
 	ptr := unsafe.Pointer(p)
@@ -46,7 +51,23 @@ func UTF16PtrToString(p *uint16) string {
 	return string(utf16.Decode(a))
 }
 
-func UTF16StringLen(p *uint16) (length int64) {
+func BstrToString(p *uint16) string {
+	if p == nil {
+		return ""
+	}
+	length := SysStringLen((*int16)(unsafe.Pointer(p)))
+	a := make([]uint16, length)
+
+	ptr := unsafe.Pointer(p)
+
+	for i := 0; i < int(length); i++ {
+		a[i] = *(*uint16)(ptr)
+		ptr = unsafe.Pointer(uintptr(ptr) + 2)
+	}
+	return string(utf16.Decode(a))
+}
+
+func lpOleStrLen(p *uint16) (length int64) {
 	if p == nil {
 		return 0
 	}
@@ -61,22 +82,6 @@ func UTF16StringLen(p *uint16) (length int64) {
 		ptr = unsafe.Pointer(uintptr(ptr) + 2)
 	}
 	return
-}
-
-func BasicStringToString(p *uint16) string {
-	if p == nil {
-		return ""
-	}
-	length := SysStringLen((*int16)(unsafe.Pointer(p)))
-	a := make([]uint16, length)
-
-	ptr := unsafe.Pointer(p)
-
-	for i := 0; i < int(length); i++ {
-		a[i] = *(*uint16)(ptr)
-		ptr = unsafe.Pointer(uintptr(ptr) + 2)
-	}
-	return string(utf16.Decode(a))
 }
 
 func convertHresultToError(hr uintptr, r2 uintptr, ignore error) (err error) {
