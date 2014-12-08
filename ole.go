@@ -73,16 +73,14 @@ type VARIANT struct {
 func NewVariant(vt uint16, val uint64) VARIANT {
 	var v VARIANT
 	v.VT = vt
+	v.Val = int(val)
 
 	if runtime.GOARCH == "386" {
 		if vt == VT_R8 || vt == VT_UI8 || vt == VT_I8 || vt == VT_CY {
 			v.Val = int(val & 0xffffffff)
 			v.Val2 = int(val >> 32)
 		}
-	} else {
-		v.Val = int(val)
 	}
-
 	return v
 }
 
