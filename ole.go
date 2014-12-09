@@ -2,6 +2,7 @@ package ole
 
 import (
 	"fmt"
+	"math"
 	"runtime"
 	"syscall"
 	"unicode/utf16"
@@ -12,6 +13,8 @@ type OleError struct {
 	hr          uintptr
 	description string
 }
+
+type Currency float64
 
 func errstr(errno int) string {
 	// ask windows for the remaining errors
@@ -61,6 +64,20 @@ type DISPPARAMS struct {
 	cNamedArgs        uint32
 }
 
+/*
+ * VARIANT is 16 bytes on 32-bit platforms, and 24 bytes on 64-bit.
+ *
+ * To work around this difference, the value is split into Val and Val2,
+ * and they are additional defined as 'int', so that they are either
+ * 32 bits or 64 bits, depending on GOARCH.
+ *
+ * The other fields always add up to 8 bytes, so when GOARCH==386 Val and Val2
+ * will each be 32 bits (4 bytes), thus sizeof(VARIANT) will be 16.
+ *
+ * When GOARCH==amd64, Val and Val2 will be 64 bits ( bytes),
+ * thus sizeof(VARIANT) will be 24.
+ *
+ */
 type VARIANT struct {
 	VT         uint16 //  2
 	wReserved1 uint16 //  4
@@ -106,13 +123,27 @@ func (v *VARIANT) Clear() error {
 }
 
 // Returns v's value based on its VALTYPE.
-// Currently supported types: 2- and 4-byte integers, strings, bools.
+// Currently supported types: 2- and 4-byte integers, strings, float32s, float64s, bools.
 // Note that 64-bit integers, datetimes, and other types are stored as strings
 // and will be returned as strings.
 func (v *VARIANT) Value() interface{} {
 	switch v.VT {
 	case VT_I2, VT_I4:
 		return v.Val
+	case VT_R4:
+		return math.Float32frombits(uint32(v.Val))
+	case VT_R8:
+		val := uint64(v.Val)
+		if runtime.GOARCH == "386" {
+			val = (uint64(v.Val2) << 32) | uint64(v.Val)
+		}
+		return math.Float64frombits(val)
+	case VT_CY:
+		val := uint64(v.Val)
+		if runtime.GOARCH == "386" {
+			val = (uint64(v.Val2) << 32) | uint64(v.Val)
+		}
+		return Currency(float64(val) / 10000)
 	case VT_BSTR:
 		return v.ToString()
 	case VT_BOOL:

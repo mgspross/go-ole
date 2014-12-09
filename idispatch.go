@@ -1,6 +1,7 @@
 package ole
 
 import (
+	"math"
 	"syscall"
 	"unsafe"
 )
@@ -158,17 +159,24 @@ func invoke(disp *IDispatch, dispid int32, dispatch int16, params ...interface{}
 			case *uint64:
 				vargs[n] = NewVariant(VT_UI8|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*uint64)))))
 			case float32:
-				vargs[n] = NewVariant(VT_R4, uint64(v.(float32)))
+				vargs[n] = NewVariant(VT_R4, uint64(math.Float32bits(v.(float32))))
 			case *float32:
-				vargs[n] = NewVariant(VT_R4|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*float32)))))
+				ftoi32 := math.Float32bits(*(v.(*float32)))
+				vargs[n] = NewVariant(VT_R4|VT_BYREF, uint64(uintptr(unsafe.Pointer(&ftoi32))))
 			case float64:
-				vargs[n] = NewVariant(VT_R8, uint64(v.(float64)))
+				vargs[n] = NewVariant(VT_R8, uint64(math.Float64bits(v.(float64))))
 			case *float64:
-				vargs[n] = NewVariant(VT_R8|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*float64)))))
+				ftoi64 := math.Float64bits(*(v.(*float64)))
+				vargs[n] = NewVariant(VT_R8|VT_BYREF, uint64(uintptr(unsafe.Pointer(&ftoi64))))
 			case string:
 				vargs[n] = NewVariant(VT_BSTR, uint64(uintptr(unsafe.Pointer(SysAllocStringLen(v.(string))))))
 			case *string:
 				vargs[n] = NewVariant(VT_BSTR|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*string)))))
+			case Currency:
+				vargs[n] = NewVariant(VT_CY, uint64(10000*v.(Currency)))
+			case *Currency:
+				cval := uint64(10000 * (*(v.(*Currency))))
+				vargs[n] = NewVariant(VT_CY|VT_BYREF, uint64(uintptr(unsafe.Pointer(&cval))))
 			case *IDispatch:
 				vargs[n] = NewVariant(VT_DISPATCH, uint64(uintptr(unsafe.Pointer(v.(*IDispatch)))))
 			case **IDispatch:
