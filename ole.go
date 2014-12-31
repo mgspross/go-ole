@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"syscall"
 	"unicode/utf16"
-	"unsafe"
 )
 
 type OleError struct {
@@ -62,91 +61,6 @@ type DISPPARAMS struct {
 	rgdispidNamedArgs uintptr
 	cArgs             uint32
 	cNamedArgs        uint32
-}
-
-// A VARIANT in Windows is 16 bytes on 32-bit architectures, and 24 bytes on 64-bit architectures.
-//
-// To work around this difference, the value is split into two fields, Val and Val2,
-// and they are both defined as int, so that they are either 32 bits or 64 bits
-// depending on the architecture the program is running on.
-//
-// The other fields always add up to 8 bytes, so when GOARCH is 386, Val and Val2
-// will each be 32 bits (4 bytes), thus unsafe.Sizeof(new(VARIANT)) will be 16 (8 + 4 + 4).
-//
-// When GOARCH is amd64, Val and Val2 will be 64 bits (8 bytes),
-// thus unsafe.Sizeof(new(VARIANT)) will be 24 (8 + 8 + 8).
-type VARIANT struct {
-	VT         uint16 //  2
-	wReserved1 uint16 //  4
-	wReserved2 uint16 //  6
-	wReserved3 uint16 //  8
-	Val        int
-	Val2       int
-}
-
-func NewVariant(vt uint16, val uint64) VARIANT {
-	var v VARIANT
-	v.VT = vt
-	v.Val = int(val)
-
-	if runtime.GOARCH == "386" {
-		if vt == VT_R8 || vt == VT_UI8 || vt == VT_I8 || vt == VT_CY {
-			v.Val = int(val & 0xffffffff)
-			v.Val2 = int(val >> 32)
-		}
-	}
-	return v
-}
-
-func (v *VARIANT) ToIUnknown() *IUnknown {
-	return (*IUnknown)(unsafe.Pointer(uintptr(v.Val)))
-}
-
-func (v *VARIANT) ToIDispatch() *IDispatch {
-	return (*IDispatch)(unsafe.Pointer(uintptr(v.Val)))
-}
-
-func (v *VARIANT) ToArray() *SafeArrayConversion {
-	var safeArray *SafeArray = (*SafeArray)(unsafe.Pointer(uintptr(v.Val)))
-	return &SafeArrayConversion{safeArray}
-}
-
-func (v *VARIANT) ToString() string {
-	return BstrToString(*(**uint16)(unsafe.Pointer(&v.Val)))
-}
-
-func (v *VARIANT) Clear() error {
-	return VariantClear(v)
-}
-
-// Returns v's value based on its VALTYPE.
-// Currently supported types: 2- and 4-byte integers, strings, float32s, float64s, bools.
-// Note that 64-bit integers, datetimes, and other types are stored as strings
-// and will be returned as strings.
-func (v *VARIANT) Value() interface{} {
-	switch v.VT {
-	case VT_I2, VT_I4:
-		return v.Val
-	case VT_R4:
-		return math.Float32frombits(uint32(v.Val))
-	case VT_R8:
-		val := uint64(v.Val)
-		if runtime.GOARCH == "386" {
-			val = (uint64(v.Val2) << 32) | uint64(v.Val)
-		}
-		return math.Float64frombits(val)
-	case VT_CY:
-		val := uint64(v.Val)
-		if runtime.GOARCH == "386" {
-			val = (uint64(v.Val2) << 32) | uint64(v.Val)
-		}
-		return Currency(float64(val) / 10000)
-	case VT_BSTR:
-		return v.ToString()
-	case VT_BOOL:
-		return v.Val != 0
-	}
-	return nil
 }
 
 type EXCEPINFO struct {

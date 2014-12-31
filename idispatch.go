@@ -7,35 +7,19 @@ import (
 )
 
 type IDispatch struct {
-	lpVtbl *pIDispatchVtbl
+	IUnknown
 }
 
-type pIDispatchVtbl struct {
-	pQueryInterface   uintptr
-	pAddRef           uintptr
-	pRelease          uintptr
-	pGetTypeInfoCount uintptr
-	pGetTypeInfo      uintptr
-	pGetIDsOfNames    uintptr
-	pInvoke           uintptr
+type IDispatchVtbl struct {
+	IUnknownVtbl
+	GetTypeInfoCount uintptr
+	GetTypeInfo      uintptr
+	GetIDsOfNames    uintptr
+	Invoke           uintptr
 }
 
-func (v *IDispatch) QueryInterface(iid *GUID) (disp *IDispatch, err error) {
-	disp, err = queryInterface((*IUnknown)(unsafe.Pointer(v)), iid)
-	return
-}
-
-func (v *IDispatch) MustQueryInterface(iid *GUID) (disp *IDispatch) {
-	disp, _ = queryInterface((*IUnknown)(unsafe.Pointer(v)), iid)
-	return
-}
-
-func (v *IDispatch) AddRef() int32 {
-	return addRef((*IUnknown)(unsafe.Pointer(v)))
-}
-
-func (v *IDispatch) Release() int32 {
-	return release((*IUnknown)(unsafe.Pointer(v)))
+func (v *IDispatch) VTable() *IDispatchVtbl {
+	return (*IDispatchVtbl)(unsafe.Pointer(v.RawVTable))
 }
 
 func (v *IDispatch) GetIDsOfName(names []string) (dispid []int32, err error) {
@@ -66,7 +50,7 @@ func getIDsOfName(disp *IDispatch, names []string) (dispid []int32, err error) {
 	dispid = make([]int32, len(names))
 	namelen := uint32(len(names))
 	hr, _, _ := syscall.Syscall6(
-		disp.lpVtbl.pGetIDsOfNames,
+		disp.VTable().GetIDsOfNames,
 		6,
 		uintptr(unsafe.Pointer(disp)),
 		uintptr(unsafe.Pointer(IID_NULL)),
@@ -82,7 +66,7 @@ func getIDsOfName(disp *IDispatch, names []string) (dispid []int32, err error) {
 
 func getTypeInfoCount(disp *IDispatch) (c uint32, err error) {
 	hr, _, _ := syscall.Syscall(
-		disp.lpVtbl.pGetTypeInfoCount,
+		disp.VTable().GetTypeInfoCount,
 		2,
 		uintptr(unsafe.Pointer(disp)),
 		uintptr(unsafe.Pointer(&c)),
@@ -95,7 +79,7 @@ func getTypeInfoCount(disp *IDispatch) (c uint32, err error) {
 
 func getTypeInfo(disp *IDispatch) (tinfo *ITypeInfo, err error) {
 	hr, _, _ := syscall.Syscall(
-		disp.lpVtbl.pGetTypeInfo,
+		disp.VTable().GetTypeInfo,
 		3,
 		uintptr(unsafe.Pointer(disp)),
 		uintptr(GetUserDefaultLCID()),
@@ -121,73 +105,66 @@ func invoke(disp *IDispatch, dispid int32, dispatch int16, params ...interface{}
 			//n := len(params)-i-1
 			n := len(params) - i - 1
 			VariantInit(&vargs[n])
-			switch v.(type) {
+			switch vv := v.(type) {
 			case bool:
-				if v.(bool) {
+				if vv {
 					vargs[n] = NewVariant(VT_BOOL, 0xffff)
 				} else {
 					vargs[n] = NewVariant(VT_BOOL, 0)
 				}
 			case *bool:
-				vargs[n] = NewVariant(VT_BOOL|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*bool)))))
+				vargs[n] = NewVariant(VT_BOOL|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*bool)))))
 			case byte:
-				vargs[n] = NewVariant(VT_I1, uint64(v.(byte)))
+				vargs[n] = NewVariant(VT_I1, int64(v.(byte)))
 			case *byte:
-				vargs[n] = NewVariant(VT_I1|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*byte)))))
+				vargs[n] = NewVariant(VT_I1|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*byte)))))
 			case int16:
-				vargs[n] = NewVariant(VT_I2, uint64(v.(int16)))
+				vargs[n] = NewVariant(VT_I2, int64(v.(int16)))
 			case *int16:
-				vargs[n] = NewVariant(VT_I2|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*int16)))))
+				vargs[n] = NewVariant(VT_I2|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*int16)))))
 			case uint16:
-				vargs[n] = NewVariant(VT_UI2, uint64(v.(uint16)))
+				vargs[n] = NewVariant(VT_UI2, int64(v.(uint16)))
 			case *uint16:
-				vargs[n] = NewVariant(VT_UI2|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*uint16)))))
+				vargs[n] = NewVariant(VT_UI2|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*uint16)))))
 			case int, int32:
-				vargs[n] = NewVariant(VT_I4, uint64(v.(int)))
+				vargs[n] = NewVariant(VT_I4, int64(v.(int)))
 			case *int, *int32:
-				vargs[n] = NewVariant(VT_I4|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*int)))))
+				vargs[n] = NewVariant(VT_I4|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*int)))))
 			case uint, uint32:
-				vargs[n] = NewVariant(VT_UI4, uint64(v.(uint)))
+				vargs[n] = NewVariant(VT_UI4, int64(v.(uint)))
 			case *uint, *uint32:
-				vargs[n] = NewVariant(VT_UI4|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*uint)))))
+				vargs[n] = NewVariant(VT_UI4|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*uint)))))
 			case int64:
-				vargs[n] = NewVariant(VT_I8, uint64(v.(int64)))
+				vargs[n] = NewVariant(VT_I8, int64(v.(int64)))
 			case *int64:
-				vargs[n] = NewVariant(VT_I8|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*int64)))))
+				vargs[n] = NewVariant(VT_I8|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*int64)))))
 			case uint64:
-				vargs[n] = NewVariant(VT_UI8, uint64(v.(uint64)))
+				vargs[n] = NewVariant(VT_UI8, v.(int64))
 			case *uint64:
-				vargs[n] = NewVariant(VT_UI8|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*uint64)))))
+				vargs[n] = NewVariant(VT_UI8|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*uint64)))))
 			case float32:
-				vargs[n] = NewVariant(VT_R4, uint64(math.Float32bits(v.(float32))))
+				vargs[n] = NewVariant(VT_R4, *(*int64)(unsafe.Pointer(&vv)))
 			case *float32:
-				ftoi32 := math.Float32bits(*(v.(*float32)))
-				vargs[n] = NewVariant(VT_R4|VT_BYREF, uint64(uintptr(unsafe.Pointer(&ftoi32))))
+				vargs[n] = NewVariant(VT_R4|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*float32)))))
 			case float64:
-				vargs[n] = NewVariant(VT_R8, uint64(math.Float64bits(v.(float64))))
+				vargs[n] = NewVariant(VT_R8, *(*int64)(unsafe.Pointer(&vv)))
 			case *float64:
-				ftoi64 := math.Float64bits(*(v.(*float64)))
-				vargs[n] = NewVariant(VT_R8|VT_BYREF, uint64(uintptr(unsafe.Pointer(&ftoi64))))
+				vargs[n] = NewVariant(VT_R8|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*float64)))))
 			case string:
-				vargs[n] = NewVariant(VT_BSTR, uint64(uintptr(unsafe.Pointer(SysAllocStringLen(v.(string))))))
+				vargs[n] = NewVariant(VT_BSTR, int64(uintptr(unsafe.Pointer(SysAllocStringLen(v.(string))))))
 			case *string:
-				vargs[n] = NewVariant(VT_BSTR|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*string)))))
-			case Currency:
-				vargs[n] = NewVariant(VT_CY, uint64(10000*v.(Currency)))
-			case *Currency:
-				cval := uint64(10000 * (*(v.(*Currency))))
-				vargs[n] = NewVariant(VT_CY|VT_BYREF, uint64(uintptr(unsafe.Pointer(&cval))))
+				vargs[n] = NewVariant(VT_BSTR|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*string)))))
 			case *IDispatch:
-				vargs[n] = NewVariant(VT_DISPATCH, uint64(uintptr(unsafe.Pointer(v.(*IDispatch)))))
+				vargs[n] = NewVariant(VT_DISPATCH, int64(uintptr(unsafe.Pointer(v.(*IDispatch)))))
 			case **IDispatch:
-				vargs[n] = NewVariant(VT_DISPATCH|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(**IDispatch)))))
+				vargs[n] = NewVariant(VT_DISPATCH|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(**IDispatch)))))
 			case nil:
 				vargs[n] = NewVariant(VT_NULL, 0)
 			case *VARIANT:
-				vargs[n] = NewVariant(VT_VARIANT|VT_BYREF, uint64(uintptr(unsafe.Pointer(v.(*VARIANT)))))
+				vargs[n] = NewVariant(VT_VARIANT|VT_BYREF, int64(uintptr(unsafe.Pointer(v.(*VARIANT)))))
 			case []byte:
 				safeByteArray := safeArrayFromByteSlice(v.([]byte))
-				vargs[n] = NewVariant(VT_ARRAY|VT_UI1, uint64(uintptr(unsafe.Pointer(safeByteArray))))
+				vargs[n] = NewVariant(VT_ARRAY|VT_UI1, int64(uintptr(unsafe.Pointer(safeByteArray))))
 				defer VariantClear(&vargs[n])
 			default:
 				panic("unknown type")
@@ -201,7 +178,7 @@ func invoke(disp *IDispatch, dispid int32, dispatch int16, params ...interface{}
 	var excepInfo EXCEPINFO
 	VariantInit(result)
 	hr, _, _ := syscall.Syscall9(
-		disp.lpVtbl.pInvoke,
+		disp.VTable().Invoke,
 		9,
 		uintptr(unsafe.Pointer(disp)),
 		uintptr(dispid),

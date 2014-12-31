@@ -11,6 +11,7 @@ var (
 	procCoInitializeEx, _     = modole32.FindProc("CoInitializeEx")
 	procCoUninitialize, _     = modole32.FindProc("CoUninitialize")
 	procCoCreateInstance, _   = modole32.FindProc("CoCreateInstance")
+	procCoTaskMemFree, _      = modole32.FindProc("CoTaskMemFree")
 	procCLSIDFromProgID, _    = modole32.FindProc("CLSIDFromProgID")
 	procCLSIDFromString, _    = modole32.FindProc("CLSIDFromString")
 	procStringFromCLSID, _    = modole32.FindProc("StringFromCLSID")
@@ -68,6 +69,10 @@ func CoInitializeEx(p uintptr, coinit uint32) (err error) {
 
 func CoUninitialize() {
 	procCoUninitialize.Call()
+}
+
+func CoTaskMemFree(memptr uintptr) {
+	procCoTaskMemFree.Call(memptr)
 }
 
 func CLSIDFromProgID(progId string) (clsid *GUID, err error) {
@@ -176,10 +181,10 @@ func SysAllocString(v string) (ss *int16) {
 }
 
 func SysAllocStringLen(v string) (ss *int16) {
-	utf16 := utf16.Encode([]rune(v))
+	utf16 := utf16.Encode([]rune(v + "\x00"))
 	ptr := &utf16[0]
 
-	pss, _, _ := procSysAllocStringLen.Call(uintptr(unsafe.Pointer(ptr)), uintptr(len(utf16)))
+	pss, _, _ := procSysAllocStringLen.Call(uintptr(unsafe.Pointer(ptr)), uintptr(len(utf16)-1))
 	ss = (*int16)(unsafe.Pointer(pss))
 	return
 }
