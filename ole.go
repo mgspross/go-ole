@@ -2,8 +2,6 @@ package ole
 
 import (
 	"fmt"
-	"math"
-	"runtime"
 	"syscall"
 	"unicode/utf16"
 )

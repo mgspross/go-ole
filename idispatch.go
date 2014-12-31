@@ -1,7 +1,6 @@
 package ole
 
 import (
-	"math"
 	"syscall"
 	"unsafe"
 )
